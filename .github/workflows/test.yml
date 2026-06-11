@@ -1,0 +1,71 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call: # invoked as a gate by release.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      # uv sync first so the local pyrefly prek hook (`uv run pyrefly check`)
+      # has the project environment available.
+      - run: uv sync
+      - uses: j178/prek-action@v2
+
+  test:
+    name: Test (py${{ matrix.python-version }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        os: [ubuntu-latest]
+        include:
+          # One macOS run to catch platform-specific wheel issues.
+          - python-version: "3.13"
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync
+      - name: Pytest
+        run: uv run pytest -q
+
+  smoke:
+    name: Clean-room wheel import
+    runs-on: ubuntu-latest
+    # Builds the wheel and imports it in a fresh venv with ONLY runtime deps
+    # (no dev group). Catches any module reaching for a dependency that isn't
+    # declared in [project].dependencies.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv build
+      - name: Import from clean runtime-only venv
+        run: |
+          uv venv /tmp/clean
+          uv pip install --python /tmp/clean dist/*.whl
+          /tmp/clean/bin/python -c 'import xolars; from xolars import Xolars'

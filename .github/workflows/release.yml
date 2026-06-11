@@ -1,0 +1,68 @@
+name: Release
+
+# Manual, controlled releases. commitizen reads conventional commits since the
+# last tag to decide the next version, updates the changelog, tags, and pushes;
+# then the package is built and published to PyPI via OIDC trusted publishing.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  # Hard gate: the full test matrix must pass before anything is released.
+  test:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  release:
+    name: Bump, changelog, GitHub release
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the bump commit + tag, create the GitHub release
+    outputs:
+      version: ${{ steps.cz.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # commitizen needs full history + tags
+          # PAT so the bump commit + tag can push to a protected main.
+          token: ${{ secrets.GH_ACTIONS }}
+      - name: Bump version and update changelog
+        id: cz
+        uses: commitizen-tools/commitizen-action@0.27.1
+        with:
+          github_token: ${{ secrets.GH_ACTIONS }}
+          branch: main
+          changelog_increment_filename: body.md
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.cz.outputs.version }}
+          body_path: body.md
+
+  publish:
+    name: Publish to PyPI
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/xolars
+    permissions:
+      id-token: write # OIDC trusted publishing; no API token needed
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.release.outputs.version }} # the freshly-pushed tag
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Publish (OIDC)
+        run: uv publish

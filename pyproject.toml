@@ -1,0 +1,55 @@
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[project]
+name = "xolars"
+version = "0.1.0"
+description = "Xarray + Polars: an xarray Dataset paired with per-dimension Polars frames that stay aligned under selection."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [{ name = "d-laub", email = "dlaub@ucsd.edu" }]
+keywords = ["xarray", "polars", "zarr", "dataframe", "dataset", "bioinformatics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy<3",
+    "polars>=1.39,<2",
+    "xarray>=2026.2.0,<2027",
+    "attrs>=24",
+    "typing_extensions>=4.10",
+    "zarr>=3.1.5,<4",
+]
+
+[project.urls]
+Homepage = "https://github.com/d-laub/xolars"
+Repository = "https://github.com/d-laub/xolars"
+Issues = "https://github.com/d-laub/xolars/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.15",
+    "pyrefly>=0.16",
+    "prek>=0.2",
+    "commitizen>=4",
+]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "pep621"
+tag_format = "v$version"
+update_changelog_on_bump = true
+major_version_zero = true
+
+[tool.pyrefly]
+project-includes = ["src", "tests"]
