@@ -205,6 +205,15 @@ def test_round_trip_eager(tmp_path):
     np.testing.assert_array_equal(loaded.ds["expr"].values, _ds()["expr"].values)
 
 
+def test_open_accepts_str_path(tmp_path):
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df(), "sample_id": _sample_df()})
+    path = tmp_path / "mydata"
+    xol.write(path, mode="w")
+    loaded = Xolars.open(str(path))
+    assert isinstance(loaded.df["gene_id"], pl.LazyFrame)
+    assert isinstance(loaded.df["sample_id"], pl.LazyFrame)
+
+
 def test_round_trip_lazy_write(tmp_path):
     xol = Xolars(
         ds=_ds(),
