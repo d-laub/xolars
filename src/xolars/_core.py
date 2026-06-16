@@ -53,7 +53,8 @@ class Xolars(Generic[F]):
         object.__setattr__(self, "df", new_df)
 
     @classmethod
-    def open(cls, path: Path) -> Xolars[pl.LazyFrame]:
+    def open(cls, path: str | Path) -> Xolars[pl.LazyFrame]:
+        path = Path(path)
         ds = xr.open_zarr(path / "dataset.zarr")
         df: dict[Hashable, pl.LazyFrame] = {}
         for parquet_path in sorted(path.glob("*.parquet")):
