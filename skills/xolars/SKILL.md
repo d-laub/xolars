@@ -70,6 +70,27 @@ ids = ids.collect() if isinstance(ids, pl.LazyFrame) else ids
 xo2 = xo.sel(sample=ids["sample"].to_list())
 ```
 
+## Adding data — assign / merge
+
+Both are functional (return a **new** `Xolars`); 1-D data lives in the matching
+dimension's Polars frame, N-D data lives in the Dataset.
+
+```python
+# assign one or more named variables (xarray.Dataset.assign idiom)
+xo2 = xo.assign(gc=("gene_id", gc_array))                 # 1-D -> gene_id frame
+xo2 = xo.assign(counts=(("gene_id", "sample_id"), mat))   # 2-D -> Dataset
+xo2 = xo.assign(score=some_named_dataarray)               # aligned by label
+# passing an xarray.Dataset value is an error -> use merge()
+
+# merge whole objects; 1-D vars in xarray objects move to Polars
+xo2 = xo.merge(other_dataset, gene_frame)                 # bare frame: dim inferred
+xo2 = xo.merge(frames={"gene_id": [f1, f2]})              # explicit, aligned to gene_id
+```
+
+Conflicting names overwrite silently. Polars/xarray inputs are **left-aligned**
+to the fixed coordinates (subset → nulls, superset → dropped); existing `ds`
+coordinate sets are never grown (though a ≥2-D var may introduce a new dim).
+
 ## Disk round-trip — write / open
 
 ```python
