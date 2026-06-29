@@ -309,8 +309,10 @@ def test_assign_2d_overwrites_existing_variable():
 
 def test_assign_rejects_dataset_value():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
-    extra = xr.Dataset({"a": ("gene_id", [1, 2, 3]), "b": ("gene_id", [4, 5, 6])},
-                       coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]})
+    extra = xr.Dataset(
+        {"a": ("gene_id", [1, 2, 3]), "b": ("gene_id", [4, 5, 6])},
+        coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]},
+    )
     with pytest.raises(ValueError, match="Use merge"):
         xol.assign(thing=extra)
 
@@ -334,8 +336,8 @@ def test_merge_dataset_splits_1d_and_2d():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
     incoming = xr.Dataset(
         {
-            "gc": ("gene_id", [0.4, 0.5, 0.6]),                       # 1-D -> polars
-            "counts": (("gene_id", "sample_id"), np.zeros((3, 4))),   # 2-D -> ds
+            "gc": ("gene_id", [0.4, 0.5, 0.6]),  # 1-D -> polars
+            "counts": (("gene_id", "sample_id"), np.zeros((3, 4))),  # 2-D -> ds
         },
         coords={
             "gene_id": ["ENSG001", "ENSG002", "ENSG003"],
@@ -362,16 +364,20 @@ def test_merge_dataarray_1d_goes_to_polars():
 
 def test_merge_unnamed_dataarray_raises():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
-    da = xr.DataArray([1.0, 2.0, 3.0], dims="gene_id",
-                      coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]})
+    da = xr.DataArray(
+        [1.0, 2.0, 3.0],
+        dims="gene_id",
+        coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]},
+    )
     with pytest.raises(ValueError, match="unnamed DataArray"):
         xol.merge(da)
 
 
 def test_merge_bare_frame_infers_dim():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
-    extra = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
-                          "gc": [0.4, 0.5, 0.6]})
+    extra = pl.DataFrame(
+        {"gene_id": ["ENSG001", "ENSG002", "ENSG003"], "gc": [0.4, 0.5, 0.6]}
+    )
     out = xol.merge(extra)
     assert list(out.df["gene_id"]["gc"]) == [0.4, 0.5, 0.6]
 
@@ -393,8 +399,9 @@ def test_merge_bare_frame_no_match_raises():
 
 def test_merge_frames_keyword_single():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
-    extra = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
-                          "gc": [0.4, 0.5, 0.6]})
+    extra = pl.DataFrame(
+        {"gene_id": ["ENSG001", "ENSG002", "ENSG003"], "gc": [0.4, 0.5, 0.6]}
+    )
     out = xol.merge(frames={"gene_id": extra})
     assert list(out.df["gene_id"]["gc"]) == [0.4, 0.5, 0.6]
 
@@ -419,8 +426,12 @@ def test_merge_left_align_subset_nulls():
 
 def test_merge_superset_drops_extra():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
-    over = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003", "ENSG999"],
-                         "gc": [0.4, 0.5, 0.6, 0.9]})
+    over = pl.DataFrame(
+        {
+            "gene_id": ["ENSG001", "ENSG002", "ENSG003", "ENSG999"],
+            "gc": [0.4, 0.5, 0.6, 0.9],
+        }
+    )
     out = xol.merge(over)
     frame = out.df["gene_id"]
     assert list(frame["gene_id"]) == ["ENSG001", "ENSG002", "ENSG003"]
@@ -429,16 +440,21 @@ def test_merge_superset_drops_extra():
 
 def test_merge_overwrites_existing_column():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})  # has "chrom"
-    over = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
-                         "chrom": ["chrX", "chrY", "chrM"]})
+    over = pl.DataFrame(
+        {
+            "gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+            "chrom": ["chrX", "chrY", "chrM"],
+        }
+    )
     out = xol.merge(over)
     assert list(out.df["gene_id"]["chrom"]) == ["chrX", "chrY", "chrM"]
 
 
 def test_merge_preserves_lazy_kind():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df().lazy()})
-    extra = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
-                          "gc": [0.4, 0.5, 0.6]})
+    extra = pl.DataFrame(
+        {"gene_id": ["ENSG001", "ENSG002", "ENSG003"], "gc": [0.4, 0.5, 0.6]}
+    )
     out = xol.merge(extra)
     assert isinstance(out.df["gene_id"], pl.LazyFrame)
     assert list(out.df["gene_id"].collect()["gc"]) == [0.4, 0.5, 0.6]
@@ -462,10 +478,10 @@ def test_merge_2d_subset_sample_nan_filled():
     assert list(out.ds["sample_id"].values) == ["S1", "S2", "S3", "S4"]
     assert out.ds["counts"].shape == (3, 4)
     vals = out.ds["counts"].values
-    np.testing.assert_array_equal(vals[:, 0], [1.0, 4.0, 7.0])   # S1
-    np.testing.assert_array_equal(vals[:, 2], [3.0, 6.0, 9.0])   # S3
-    assert np.all(np.isnan(vals[:, 1]))                            # S2 -> NaN
-    assert np.all(np.isnan(vals[:, 3]))                            # S4 -> NaN
+    np.testing.assert_array_equal(vals[:, 0], [1.0, 4.0, 7.0])  # S1
+    np.testing.assert_array_equal(vals[:, 2], [3.0, 6.0, 9.0])  # S3
+    assert np.all(np.isnan(vals[:, 1]))  # S2 -> NaN
+    assert np.all(np.isnan(vals[:, 3]))  # S4 -> NaN
 
 
 def test_merge_2d_superset_sample_dropped():

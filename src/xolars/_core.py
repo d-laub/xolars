@@ -143,7 +143,9 @@ class Xolars(Generic[F]):
         def route_oned(da: xr.DataArray) -> None:
             dim = str(da.dims[0])
             name = str(da.name)
-            key_vals = da[dim].to_numpy() if dim in da.coords else new_ds[dim].to_numpy()
+            key_vals = (
+                da[dim].to_numpy() if dim in da.coords else new_ds[dim].to_numpy()
+            )
             route_frame(dim, pl.DataFrame({dim: key_vals, name: da.to_numpy()}))
 
         for obj in objects:
@@ -212,7 +214,9 @@ def _frame_kind(df: Mapping[Hashable, Any]) -> type:
     return pl.DataFrame
 
 
-def _coerce_kind(frame: pl.DataFrame | pl.LazyFrame, kind: type) -> pl.DataFrame | pl.LazyFrame:
+def _coerce_kind(
+    frame: pl.DataFrame | pl.LazyFrame, kind: type
+) -> pl.DataFrame | pl.LazyFrame:
     """Coerce a polars frame to `kind` (pl.DataFrame or pl.LazyFrame)."""
     if kind is pl.LazyFrame:
         return frame.lazy() if isinstance(frame, pl.DataFrame) else frame
@@ -251,7 +255,9 @@ def _attach_columns(frame: F, incoming: pl.DataFrame | pl.LazyFrame, key: str) -
     """Left-join `incoming` onto `frame` on `key`. Incoming's overlapping
     non-key columns overwrite frame's. Result keeps frame's kind and rows."""
     if isinstance(frame, pl.LazyFrame):
-        lazy_in: pl.LazyFrame = incoming.lazy() if isinstance(incoming, pl.DataFrame) else incoming
+        lazy_in: pl.LazyFrame = (
+            incoming.lazy() if isinstance(incoming, pl.DataFrame) else incoming
+        )
         overlap = [c for c in _columns(lazy_in) if c != key and c in _columns(frame)]
         base_lf: pl.LazyFrame = frame.drop(overlap) if overlap else frame
         return cast(F, base_lf.join(lazy_in, on=key, how="left"))
@@ -261,7 +267,9 @@ def _attach_columns(frame: F, incoming: pl.DataFrame | pl.LazyFrame, key: str) -
             pl.DataFrame,
             incoming.collect() if isinstance(incoming, pl.LazyFrame) else incoming,
         )
-        overlap = [c for c in _columns(eager_in) if c != key and c in _columns(eager_frame)]
+        overlap = [
+            c for c in _columns(eager_in) if c != key and c in _columns(eager_frame)
+        ]
         base_df: pl.DataFrame = eager_frame.drop(overlap) if overlap else eager_frame
         return cast(F, base_df.join(eager_in, on=key, how="left"))
 
@@ -269,7 +277,9 @@ def _attach_columns(frame: F, incoming: pl.DataFrame | pl.LazyFrame, key: str) -
 def _is_dims(x: Any) -> bool:
     """True if x looks like an xarray dims spec: a str or a sequence of str."""
     return isinstance(x, str) or (
-        isinstance(x, (tuple, list)) and len(x) > 0 and all(isinstance(d, str) for d in x)
+        isinstance(x, (tuple, list))
+        and len(x) > 0
+        and all(isinstance(d, str) for d in x)
     )
 
 
@@ -320,13 +330,19 @@ def _prepare_assign(name: str, value: Any, ds: xr.Dataset) -> tuple[Any, ...]:
         if len(dims) == 1:
             dim = dims[0]
             _require_dim(ds, dim, name)
-            key_vals = value[dim].to_numpy() if dim in value.coords else ds[dim].to_numpy()
+            key_vals = (
+                value[dim].to_numpy() if dim in value.coords else ds[dim].to_numpy()
+            )
             incoming = pl.DataFrame({dim: key_vals, name: value.to_numpy()})
             return ("polars", dim, incoming)
         return ("xarray", value)
     if isinstance(value, tuple) and len(value) == 2 and _is_dims(value[0]):
         raw_dims, data = value
-        dims = (raw_dims,) if isinstance(raw_dims, str) else tuple(str(d) for d in raw_dims)
+        dims = (
+            (raw_dims,)
+            if isinstance(raw_dims, str)
+            else tuple(str(d) for d in raw_dims)
+        )
         if len(dims) == 1:
             dim = dims[0]
             _require_dim(ds, dim, name)
