@@ -442,3 +442,84 @@ def test_merge_preserves_lazy_kind():
     out = xol.merge(extra)
     assert isinstance(out.df["gene_id"], pl.LazyFrame)
     assert list(out.df["gene_id"].collect()["gc"]) == [0.4, 0.5, 0.6]
+
+
+# FIX 1 — 2-D Dataset left-merge alignment on an existing dim ──────────────
+
+
+def test_merge_2d_subset_sample_nan_filled():
+    """join="left" keeps ds coords fixed; missing sample slots become NaN."""
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    counts = np.array([[1.0, 3.0], [4.0, 6.0], [7.0, 9.0]])
+    incoming = xr.Dataset(
+        {"counts": (["gene_id", "sample_id"], counts)},
+        coords={
+            "gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+            "sample_id": ["S1", "S3"],
+        },
+    )
+    out = xol.merge(incoming)
+    assert list(out.ds["sample_id"].values) == ["S1", "S2", "S3", "S4"]
+    assert out.ds["counts"].shape == (3, 4)
+    vals = out.ds["counts"].values
+    np.testing.assert_array_equal(vals[:, 0], [1.0, 4.0, 7.0])   # S1
+    np.testing.assert_array_equal(vals[:, 2], [3.0, 6.0, 9.0])   # S3
+    assert np.all(np.isnan(vals[:, 1]))                            # S2 -> NaN
+    assert np.all(np.isnan(vals[:, 3]))                            # S4 -> NaN
+
+
+def test_merge_2d_superset_sample_dropped():
+    """join="left" drops extra coords not in ds; ds coords not grown."""
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    counts = np.arange(15.0).reshape(3, 5)
+    incoming = xr.Dataset(
+        {"counts": (["gene_id", "sample_id"], counts)},
+        coords={
+            "gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+            "sample_id": ["S1", "S2", "S3", "S4", "S5"],
+        },
+    )
+    out = xol.merge(incoming)
+    assert list(out.ds["sample_id"].values) == ["S1", "S2", "S3", "S4"]
+    assert out.ds["counts"].shape == (3, 4)
+    np.testing.assert_array_equal(out.ds["counts"].values, counts[:, :4])
+
+
+# FIX 2 — new dim introduced in same merge call as its peeled 1-D frame ────
+
+
+def test_merge_new_dim_with_peeled_frame():
+    """A Dataset can introduce a new dim (score 2-D) and peel a 1-D var
+    (ct_label) along that same new dim in one merge() call."""
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    score = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    incoming = xr.Dataset(
+        {
+            "score": (["gene_id", "cell_type"], score),
+            "ct_label": ("cell_type", ["T-cell", "B-cell"]),
+        },
+        coords={
+            "gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+            "cell_type": ["CT1", "CT2"],
+        },
+    )
+    out = xol.merge(incoming)
+    assert "cell_type" in out.ds.dims
+    assert "score" in out.ds.data_vars
+    assert "cell_type" in out.df
+    ct_frame = out.df["cell_type"]
+    assert list(ct_frame["cell_type"]) == ["CT1", "CT2"]
+    assert list(ct_frame["ct_label"]) == ["T-cell", "B-cell"]
+
+
+# FIX 5 — tuple form of frames= keyword ────────────────────────────────────
+
+
+def test_merge_frames_keyword_tuple():
+    """frames={dim: (f1, f2)} tuple form merges both frames."""
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    f1 = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"], "a": [1, 2, 3]})
+    f2 = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"], "b": [4, 5, 6]})
+    out = xol.merge(frames={"gene_id": (f1, f2)})
+    assert list(out.df["gene_id"]["a"]) == [1, 2, 3]
+    assert list(out.df["gene_id"]["b"]) == [4, 5, 6]

@@ -134,7 +134,8 @@ class Xolars(Generic[F]):
         kind = _frame_kind(self.df)
 
         def route_frame(dim: str, frame: pl.DataFrame | pl.LazyFrame) -> None:
-            nonlocal new_df
+            # new_df is mutated in-place (dict item assignment), not rebound,
+            # so no `nonlocal` is needed here.
             _require_dim(new_ds, dim, dim)
             base = _ensure_frame(new_df, new_ds, dim, kind)
             new_df[dim] = _attach_columns(base, _coerce_kind(frame, kind), dim)
@@ -150,12 +151,15 @@ class Xolars(Generic[F]):
                 route_frame(_infer_dim(obj, new_ds), obj)
             elif isinstance(obj, (xr.Dataset, xr.DataArray)):
                 keep, oned = _peel_1d(obj)
-                for da in oned:
-                    route_oned(da)
+                # Merge ≥2-D vars FIRST so that a 2-D var introducing a NEW
+                # ds dimension (intended — no guard) is present in new_ds
+                # before peeled 1-D vars or frames={newdim: ...} attach to it.
                 if len(keep.data_vars) > 0:
                     overlap = [v for v in keep.data_vars if v in new_ds.data_vars]
                     base = new_ds.drop_vars(overlap) if overlap else new_ds
                     new_ds = xr.merge([base, keep], join="left", compat="override")
+                for da in oned:
+                    route_oned(da)
             else:
                 raise TypeError(
                     f"merge() got an unsupported object of type "
@@ -282,7 +286,7 @@ def _peel_1d(obj: xr.Dataset | xr.DataArray) -> tuple[xr.Dataset, list[xr.DataAr
     keep: list[Hashable] = []
     for vname, da in ds.data_vars.items():
         if da.ndim == 1:
-            oned.append(da.rename(vname))
+            oned.append(da)  # da.name already equals vname from items()
         else:
             keep.append(vname)
     return ds[keep], oned
@@ -300,7 +304,7 @@ def _infer_dim(frame: pl.DataFrame | pl.LazyFrame, ds: xr.Dataset) -> str:
     return matches[0]
 
 
-def _prepare_assign(name: str, value: Any, ds: xr.Dataset):
+def _prepare_assign(name: str, value: Any, ds: xr.Dataset) -> tuple[Any, ...]:
     """Validate and route one assign value.
 
     Returns ('polars', dim, incoming_df) for 1-D data, or ('xarray', value)
