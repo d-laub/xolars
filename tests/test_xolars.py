@@ -366,3 +366,79 @@ def test_merge_unnamed_dataarray_raises():
                       coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]})
     with pytest.raises(ValueError, match="unnamed DataArray"):
         xol.merge(da)
+
+
+def test_merge_bare_frame_infers_dim():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    extra = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+                          "gc": [0.4, 0.5, 0.6]})
+    out = xol.merge(extra)
+    assert list(out.df["gene_id"]["gc"]) == [0.4, 0.5, 0.6]
+
+
+def test_merge_bare_frame_ambiguous_raises():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    # both gene_id and sample_id are ds dims -> ambiguous
+    bad = pl.DataFrame({"gene_id": ["ENSG001"], "sample_id": ["S1"], "v": [1]})
+    with pytest.raises(ValueError, match="infer target dimension"):
+        xol.merge(bad)
+
+
+def test_merge_bare_frame_no_match_raises():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    bad = pl.DataFrame({"not_a_dim": [1, 2, 3], "v": [4, 5, 6]})
+    with pytest.raises(ValueError, match="infer target dimension"):
+        xol.merge(bad)
+
+
+def test_merge_frames_keyword_single():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    extra = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+                          "gc": [0.4, 0.5, 0.6]})
+    out = xol.merge(frames={"gene_id": extra})
+    assert list(out.df["gene_id"]["gc"]) == [0.4, 0.5, 0.6]
+
+
+def test_merge_frames_keyword_sequence():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    f1 = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"], "a": [1, 2, 3]})
+    f2 = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"], "b": [4, 5, 6]})
+    out = xol.merge(frames={"gene_id": [f1, f2]})
+    assert list(out.df["gene_id"]["a"]) == [1, 2, 3]
+    assert list(out.df["gene_id"]["b"]) == [4, 5, 6]
+
+
+def test_merge_left_align_subset_nulls():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    partial = pl.DataFrame({"gene_id": ["ENSG001", "ENSG003"], "gc": [0.4, 0.6]})
+    out = xol.merge(partial)
+    frame = out.df["gene_id"]
+    assert list(frame["gene_id"]) == ["ENSG001", "ENSG002", "ENSG003"]
+    assert frame["gc"].to_list() == [0.4, None, 0.6]
+
+
+def test_merge_superset_drops_extra():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    over = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003", "ENSG999"],
+                         "gc": [0.4, 0.5, 0.6, 0.9]})
+    out = xol.merge(over)
+    frame = out.df["gene_id"]
+    assert list(frame["gene_id"]) == ["ENSG001", "ENSG002", "ENSG003"]
+    assert list(frame["gc"]) == [0.4, 0.5, 0.6]
+
+
+def test_merge_overwrites_existing_column():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})  # has "chrom"
+    over = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+                         "chrom": ["chrX", "chrY", "chrM"]})
+    out = xol.merge(over)
+    assert list(out.df["gene_id"]["chrom"]) == ["chrX", "chrY", "chrM"]
+
+
+def test_merge_preserves_lazy_kind():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df().lazy()})
+    extra = pl.DataFrame({"gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+                          "gc": [0.4, 0.5, 0.6]})
+    out = xol.merge(extra)
+    assert isinstance(out.df["gene_id"], pl.LazyFrame)
+    assert list(out.df["gene_id"].collect()["gc"]) == [0.4, 0.5, 0.6]
