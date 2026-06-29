@@ -305,3 +305,23 @@ def test_assign_2d_overwrites_existing_variable():
     new_expr = np.zeros((3, 4))
     out = xol.assign(expr=(("gene_id", "sample_id"), new_expr))
     np.testing.assert_array_equal(out.ds["expr"].values, new_expr)
+
+
+def test_assign_rejects_dataset_value():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    extra = xr.Dataset({"a": ("gene_id", [1, 2, 3]), "b": ("gene_id", [4, 5, 6])},
+                       coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]})
+    with pytest.raises(ValueError, match="Use merge"):
+        xol.assign(thing=extra)
+
+
+def test_assign_rejects_bare_array_no_dims():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    with pytest.raises(ValueError, match="no dimension information"):
+        xol.assign(gc=np.array([0.4, 0.5, 0.6]))
+
+
+def test_assign_rejects_unknown_dim():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    with pytest.raises(ValueError, match="not a dimension"):
+        xol.assign(x=("nope", [1, 2, 3]))
