@@ -325,3 +325,44 @@ def test_assign_rejects_unknown_dim():
     xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
     with pytest.raises(ValueError, match="not a dimension"):
         xol.assign(x=("nope", [1, 2, 3]))
+
+
+# ── merge ─────────────────────────────────────────────────────────────────────
+
+
+def test_merge_dataset_splits_1d_and_2d():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    incoming = xr.Dataset(
+        {
+            "gc": ("gene_id", [0.4, 0.5, 0.6]),                       # 1-D -> polars
+            "counts": (("gene_id", "sample_id"), np.zeros((3, 4))),   # 2-D -> ds
+        },
+        coords={
+            "gene_id": ["ENSG001", "ENSG002", "ENSG003"],
+            "sample_id": ["S1", "S2", "S3", "S4"],
+        },
+    )
+    out = xol.merge(incoming)
+    assert list(out.df["gene_id"]["gc"]) == [0.4, 0.5, 0.6]
+    assert "counts" in out.ds.data_vars
+    assert "gc" not in out.ds.data_vars  # 1-D was peeled out, not left in ds
+
+
+def test_merge_dataarray_1d_goes_to_polars():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    da = xr.DataArray(
+        [1.0, 2.0, 3.0],
+        dims="gene_id",
+        coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]},
+        name="score",
+    )
+    out = xol.merge(da)
+    assert list(out.df["gene_id"]["score"]) == [1.0, 2.0, 3.0]
+
+
+def test_merge_unnamed_dataarray_raises():
+    xol = Xolars(ds=_ds(), df={"gene_id": _gene_df()})
+    da = xr.DataArray([1.0, 2.0, 3.0], dims="gene_id",
+                      coords={"gene_id": ["ENSG001", "ENSG002", "ENSG003"]})
+    with pytest.raises(ValueError, match="unnamed DataArray"):
+        xol.merge(da)

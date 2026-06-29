@@ -124,6 +124,52 @@ class Xolars(Generic[F]):
                 new_ds = new_ds.assign({name: route[1]})
         return evolve(self, ds=new_ds, df=new_df)
 
+    def merge(
+        self,
+        *objects: xr.Dataset | xr.DataArray | pl.DataFrame | pl.LazyFrame,
+        frames: Mapping[str, Any] | None = None,
+    ) -> Self:
+        new_ds = self.ds
+        new_df: dict[Hashable, pl.DataFrame | pl.LazyFrame] = dict(self.df)
+        kind = _frame_kind(self.df)
+
+        def route_frame(dim: str, frame: pl.DataFrame | pl.LazyFrame) -> None:
+            nonlocal new_df
+            _require_dim(new_ds, dim, dim)
+            base = _ensure_frame(new_df, new_ds, dim, kind)
+            new_df[dim] = _attach_columns(base, _coerce_kind(frame, kind), dim)
+
+        def route_oned(da: xr.DataArray) -> None:
+            dim = str(da.dims[0])
+            name = str(da.name)
+            key_vals = da[dim].to_numpy() if dim in da.coords else new_ds[dim].to_numpy()
+            route_frame(dim, pl.DataFrame({dim: key_vals, name: da.to_numpy()}))
+
+        for obj in objects:
+            if isinstance(obj, (pl.DataFrame, pl.LazyFrame)):
+                route_frame(_infer_dim(obj, new_ds), obj)
+            elif isinstance(obj, (xr.Dataset, xr.DataArray)):
+                keep, oned = _peel_1d(obj)
+                for da in oned:
+                    route_oned(da)
+                if len(keep.data_vars) > 0:
+                    overlap = [v for v in keep.data_vars if v in new_ds.data_vars]
+                    base = new_ds.drop_vars(overlap) if overlap else new_ds
+                    new_ds = xr.merge([base, keep], join="left", compat="override")
+            else:
+                raise TypeError(
+                    f"merge() got an unsupported object of type "
+                    f"{type(obj).__name__}; expected xarray.Dataset/DataArray or "
+                    f"polars DataFrame/LazyFrame."
+                )
+
+        for dim, val in (frames or {}).items():
+            seq = val if isinstance(val, (list, tuple)) else [val]
+            for frame in seq:
+                route_frame(str(dim), frame)
+
+        return evolve(self, ds=new_ds, df=new_df)
+
 
 def _reorder(frame: F, coords: xr.DataArray) -> F:
     """Reorder frame rows to match the given coordinate order."""
@@ -221,6 +267,37 @@ def _is_dims(x: Any) -> bool:
     return isinstance(x, str) or (
         isinstance(x, (tuple, list)) and len(x) > 0 and all(isinstance(d, str) for d in x)
     )
+
+
+def _peel_1d(obj: xr.Dataset | xr.DataArray) -> tuple[xr.Dataset, list[xr.DataArray]]:
+    """Split an xarray object into a Dataset of >=2-D / scalar data vars and a
+    list of its 1-D data vars (as named DataArrays)."""
+    if isinstance(obj, xr.DataArray):
+        if obj.name is None:
+            raise ValueError("Cannot merge an unnamed DataArray; set its .name.")
+        ds = obj.to_dataset()
+    else:
+        ds = obj
+    oned: list[xr.DataArray] = []
+    keep: list[Hashable] = []
+    for vname, da in ds.data_vars.items():
+        if da.ndim == 1:
+            oned.append(da.rename(vname))
+        else:
+            keep.append(vname)
+    return ds[keep], oned
+
+
+def _infer_dim(frame: pl.DataFrame | pl.LazyFrame, ds: xr.Dataset) -> str:
+    """Infer the target dim as the single frame column matching a ds dimension."""
+    matches = [c for c in _columns(frame) if c in ds.sizes]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Cannot infer target dimension for polars frame: expected exactly "
+            f"one column matching a ds dimension, found {matches}. "
+            f"Use frames={{dim: frame}} to be explicit."
+        )
+    return matches[0]
 
 
 def _prepare_assign(name: str, value: Any, ds: xr.Dataset):
