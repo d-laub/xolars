@@ -3,6 +3,11 @@
 The :class:`Xolars` container keeps an :class:`xarray.Dataset` and one Polars
 frame per dimension aligned to the Dataset's coordinate order, including under
 ``isel``/``sel`` selection and zarr+parquet round-trips.
+
+Use :meth:`Xolars.assign` to add a single named variable (1-D data routes to the
+matching dimension's frame; N-D data routes to the Dataset) and
+:meth:`Xolars.merge` to bring in whole xarray objects and Polars frames at once,
+peeling 1-D variables out of xarray objects into Polars.
 """
 
 from __future__ import annotations
